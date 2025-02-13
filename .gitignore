@@ -77,3 +77,6 @@ crashlytics-build.properties
 # 機密キーファイル
 Keys.cs
 Keys.cs.meta
+
+# TextMesh Pro files
+[Aa]ssets/TextMesh*Pro/
