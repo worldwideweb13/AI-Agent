@@ -9,6 +9,10 @@ using System.Text;
 
 public class GeminiManager : MonoBehaviour
 {
+
+    /// <summary>
+    /// Gemini-API Call用URL
+    /// </summary>
     private string API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
 
     /// <summary>
@@ -94,7 +98,7 @@ public class GeminiManager : MonoBehaviour
                 string requestText = request.downloadHandler.text;
                 Debug.Log("API成功: " + requestText);
 
-                // 6. JSON を ChatResponse オブジェクトに変換
+            // 6. JSON を ChatResponse オブジェクトに変換
             //     ChatResponse chatResponse = JsonUtility.FromJson<ChatResponse>(requestText);
 
             //     if(
