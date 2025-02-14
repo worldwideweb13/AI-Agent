@@ -29,12 +29,11 @@ public class AutoSizeAdjuster : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-
+        
     }
 
     private void AdjustHeight()
     {
-
         // 万が一 rectTransform がまだ取得されていなければここで取得
         if (rectTransform == null) return; // ここは基本的には発生しないが安全策
 
