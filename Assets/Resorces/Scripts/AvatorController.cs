@@ -34,7 +34,7 @@ public class AvatorController : MonoBehaviour
             case "Anger":
                 AvatorState = 2;
                 break;
-            case "Sadnes":
+            case "Sadness":
                 AvatorState = 3;
                 break;
             case "Pleasure":

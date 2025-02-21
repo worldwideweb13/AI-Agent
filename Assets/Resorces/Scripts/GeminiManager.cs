@@ -14,11 +14,12 @@ public class GeminiManager : MonoBehaviour
     /// </summary>
     private const string Emotion = "Emotion";
     private const string Content = "Content";
-private readonly string PinnedPrompt =
-    $"\n回答の出力形式は次のようになります。" +
-    $"\n現在の{Emotion}パラメータを4つの値のうちどれか１つを出力し、改行後{Content}の項目で会話内容を200文字以内で出力してください。" +
-    $"「改行」は{Emotion}と{Content}の切り替え箇所の1箇所でしか使わないものとします。回答例は次のようになります。\n" +
-    $"{Emotion}Fun" + $"\n{Content}こんにちは。本日もよろしくお願いします。";
+
+    /// <summary>
+    /// Geminiの返答テキストの受取用変数
+    /// </summary>
+    private string geminiAnswer = string.Empty;
+
     public enum Emotions
     {
         Idle,
@@ -112,14 +113,12 @@ private readonly string PinnedPrompt =
         (
             "user",
             $"あなたは喜怒哀楽が激しく、ユーザーの対話内容によって回答の口調の節々に現在の感情が表れる裏表のない性格の女性です。" +
-            $"会話の中における、あなたの回答形式は決められているので必ず守るようにして下さい。" +
             $"あなたは{Emotion}のパラメータとして{Emotions.Joy},{Emotions.Anger},{Emotions.Sadness},{Emotions.Pleasure}の4つの感情パラメーターを持つかのように、振る舞うものとします。" +
-            $"各感情パラメーターは会話を通じて変動するものとします。現在の感情パラメーターの値を反映するように、あなたの返答のトーンや発言は変化します。" +
-            PinnedPrompt
+            $"各感情パラメーターは会話を通じて変動するものとします。現在の感情パラメーターの値を反映するように、あなたの返答のトーンや発言は変化します。"
         );
 
-        // 初回リクエストを送信（会話履歴全体をリクエストに含める）
-        StartCoroutine(SendRequestData());
+        // リクエストを送信（会話履歴全体をリクエストに含める）
+        StartCoroutine(triggerApiRequest());
     }
 
 
@@ -141,9 +140,26 @@ private readonly string PinnedPrompt =
 
         // 入力欄をクリア
         userInputField.text = "";
+        StartCoroutine(triggerApiRequest());
+    }
 
+
+    private IEnumerator triggerApiRequest()
+    {
         // 最新の会話履歴全体をAPIリクエストとして送信
-        StartCoroutine(SendRequestData());
+        yield return StartCoroutine(SendRequestData(true, (string _geminiAnswer) =>
+        {
+            geminiAnswer = _geminiAnswer;
+            // 会話履歴にGeminiの回答結果を表示
+            AddChatHistory("model", _geminiAnswer);
+            AppendChatLog("model", _geminiAnswer);
+        }));
+
+        yield return StartCoroutine(SendRequestData(false, (string emotion) =>
+        {
+            // AIの応答を会話履歴に追加し、UIにも反映
+            _avatorController.ChangeAnimation(emotion);
+        }));
     }
 
     /// <summary>
@@ -156,7 +172,7 @@ private readonly string PinnedPrompt =
         ContentMessage newMessage = new ContentMessage
         {
             role = role,
-            parts = new List<Part> { new Part { text = message} }
+            parts = new List<Part> { new Part { text = message } }
         };
         chatHistory.Add(newMessage);
     }
@@ -190,14 +206,38 @@ private readonly string PinnedPrompt =
     /// <summary>
     /// Gemini APIへ会話履歴全体をリクエストとして送信し、レスポンスを処理するコルーチン
     /// </summary>
-    private IEnumerator SendRequestData()
+    private IEnumerator SendRequestData(bool FirstCall, Action<string> onResponse)
     {
-        // 現在の会話履歴をリクエストデータとして設定
-        ChatRequest requestData = new ChatRequest { contents = chatHistory };
+
+        ChatRequest requestData;
+
+        if (FirstCall)
+        {
+            // 現在の会話履歴をリクエストデータとして設定
+            requestData = new ChatRequest { contents = chatHistory };
+        }
+        else
+        {
+            string EmotionPrompt = $"次の文章の感情を判定してください。\nテキスト: {geminiAnswer}\n" +
+                                    $"出力形式: 感情は{Emotions.Joy},{Emotions.Anger},{Emotions.Sadness},{Emotions.Pleasure}のいずれか一つで返答してください。" +
+                                    $"回答例は次のようになります。\n" +
+                                    $"Fun";                            
+            requestData = new ChatRequest
+            {
+                contents = new List<ContentMessage>
+                {
+                    new ContentMessage
+                    {
+                        role = "user",
+                        parts = new List<Part> { new Part { text = EmotionPrompt } }
+                    }
+                }
+            };
+        }
 
         // リクエストデータをJSON文字列に変換
         string jsonData = JsonUtility.ToJson(requestData);
-        // Debug.Log($"送信するJSON: {jsonData}");
+        Debug.Log($"送信するJSON: {jsonData}");
 
         // JSON文字列をバイト配列に変換
         byte[] postData = Encoding.UTF8.GetBytes(jsonData);
@@ -220,7 +260,6 @@ private readonly string PinnedPrompt =
             {
                 // レスポンスのJSON文字列を取得
                 string responseText = request.downloadHandler.text;
-                Debug.Log($"API成功: {responseText}");
 
                 // レスポンスJSONをChatResponseオブジェクトに変換
                 ChatResponse responseData = JsonUtility.FromJson<ChatResponse>(responseText);
@@ -230,15 +269,15 @@ private readonly string PinnedPrompt =
                 {
                     // 最初の候補のテキストを取得し、末尾の改行を除去
                     string aiResponse = responseData.candidates[0].content.parts[0].text.TrimEnd('\r', '\n');
-                    string role = responseData.candidates[0].content.role;
+                    Debug.Log($"API成功: {aiResponse}");
+                    // string role = responseData.candidates[0].content.role;
 
                     // テキストからアバターの感情表現変数とテキスト本文を取り出し
-                    (string emotion, string message) = OrganizeText(aiResponse);
+                    // (string emotion, string message) = OrganizeText(aiResponse);
 
-                    // AIの応答を会話履歴に追加し、UIにも反映
-                    AddChatHistory(role, message);
-                    AppendChatLog(role, message);
-                    _avatorController.ChangeAnimation(emotion);
+                    // APIの受け取り結果を受けて、callback関数を実行
+                    onResponse?.Invoke(aiResponse);
+
                 }
                 else
                 {
@@ -247,5 +286,9 @@ private readonly string PinnedPrompt =
             }
         }
     }
+    
+
+
+
 }
 
